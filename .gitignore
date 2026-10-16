@@ -1,0 +1,17 @@
+# Credentials / secrets
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+
+# PowerShell / Windows
+*.clixml
+*.log
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
