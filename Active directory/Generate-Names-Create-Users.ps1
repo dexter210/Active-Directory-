@@ -1,46 +1,60 @@
- # ----- Edit these Variables for your own Use Case ----- #
-$PASSWORD_FOR_USERS   = "Password1"
-$NUMBER_OF_ACCOUNTS_TO_CREATE = 10000
-# ------------------------------------------------------ #
+# Generate synthetic names and create lab-only Active Directory users.
+Import-Module ActiveDirectory
 
-Function generate-random-name() {
+$NUMBER_OF_ACCOUNTS_TO_CREATE = 10000
+$password = Read-Host "Enter a temporary password for the lab users" -AsSecureString
+
+function New-RandomName {
     $consonants = @('b','c','d','f','g','h','j','k','l','m','n','p','q','r','s','t','v','w','x','z')
     $vowels = @('a','e','i','o','u','y')
     $nameLength = Get-Random -Minimum 3 -Maximum 7
-    $count = 0
     $name = ""
 
-    while ($count -lt $nameLength) {
-        if ($($count % 2) -eq 0) {
-            $name += $consonants[$(Get-Random -Minimum 0 -Maximum $($consonants.Count - 1))]
+    for ($i = 0; $i -lt $nameLength; $i++) {
+        if (($i % 2) -eq 0) {
+            $name += $consonants[(Get-Random -Minimum 0 -Maximum $consonants.Count)]
         }
         else {
-            $name += $vowels[$(Get-Random -Minimum 0 -Maximum $($vowels.Count - 1))]
+            $name += $vowels[(Get-Random -Minimum 0 -Maximum $vowels.Count)]
         }
-        $count++
     }
 
     return $name
-
 }
 
-$count = 1
-while ($count -lt $NUMBER_OF_ACCOUNTS_TO_CREATE) {
-    $fisrtName = generate-random-name
-    $lastName = generate-random-name
-    $username = $fisrtName + '.' + $lastName
-    $password = ConvertTo-SecureString $PASSWORD_FOR_USERS -AsPlainText -Force
+$ouName = "_EMPLOYEES"
+$domainDn = ([ADSI]"").distinguishedName
+$ouDn = "OU=$ouName,$domainDn"
 
-    Write-Host "Creating user: $($username)" -BackgroundColor Black -ForegroundColor Cyan
-    
-    New-AdUser -AccountPassword $password `
-               -GivenName $firstName `
-               -Surname $lastName `
-               -DisplayName $username `
-               -Name $username `
-               -EmployeeID $username `
-               -PasswordNeverExpires $true `
-               -Path "ou=_EMPLOYEES,$(([ADSI]`"").distinguishedName)" `
-               -Enabled $true
+if (-not (Get-ADOrganizationalUnit -LDAPFilter "(ou=$ouName)" -SearchBase $domainDn -ErrorAction SilentlyContinue)) {
+    New-ADOrganizationalUnit -Name $ouName -ProtectedFromAccidentalDeletion $false
+}
+
+$count = 0
+while ($count -lt $NUMBER_OF_ACCOUNTS_TO_CREATE) {
+    $firstName = New-RandomName
+    $lastName = New-RandomName
+    $username = "$firstName.$lastName".ToLower()
+
+    if (Get-ADUser -Filter "SamAccountName -eq '$username'" -ErrorAction SilentlyContinue) {
+        continue
+    }
+
+    Write-Host "Creating user: $username" -ForegroundColor Cyan
+
+    New-ADUser `
+        -SamAccountName $username `
+        -UserPrincipalName "$username@$((Get-ADDomain).DNSRoot)" `
+        -AccountPassword $password `
+        -GivenName $firstName `
+        -Surname $lastName `
+        -DisplayName "$firstName $lastName" `
+        -Name $username `
+        -EmployeeID $username `
+        -ChangePasswordAtLogon $true `
+        -PasswordNeverExpires $false `
+        -Path $ouDn `
+        -Enabled $true
+
     $count++
 }
